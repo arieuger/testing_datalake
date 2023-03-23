@@ -1,0 +1,91 @@
+version: "3.7"
+
+services:
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: namenode
+    volumes:
+      - hadoop_namenode_test:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+    networks:
+      - dl-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: datanode
+    volumes:
+      - hadoop_datanode_test:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070"
+    env_file:
+      - ./hadoop.env
+    networks:
+      - dl-net
+
+  hbase:
+    image: woe1997/phoenix-5.0.0-hbase-2.0.6-standlone:1.0
+    container_name: hbase
+    hostname: hbase
+    labels:
+      # Automatically smart adding to `/etc/hosts`:
+      # 127.0.0.1 hbase
+      ru.grachevko.dhu: "hbase:0:127.0.0.1"
+    ports:
+      # Hbase
+      - 16000:16000
+      - 16010:16010
+      - 16020:16020
+      - 16030:16030
+      # Zookeeper
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+      # Phoenix
+      - 8765:8765
+    volumes:
+      - hbase_data_test:/hbase-data
+      - hbase_zookeeper_data_test:/zookeeper-data
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070 datanode:50075"
+    env_file:
+      - ./hbase-standalone.env
+    depends_on:
+      - namenode
+      - datanode
+    networks:
+      - dl-net
+  
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    hostname: kafka
+    depends_on:
+      - hbase
+    ports:
+      - "29092:29092"
+      - "9092:9092"
+    volumes: 
+      - ./broker/data:/var/lib/kafka/data:rw
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: hbase:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - dl-net
+
+volumes:
+  hadoop_namenode_test:
+  hadoop_datanode_test:
+  hbase_data_test:
+  hbase_zookeeper_data_test:
+
+networks:
+  dl-net:
+    driver: bridge
